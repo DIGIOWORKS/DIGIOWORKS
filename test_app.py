@@ -4,6 +4,7 @@ Test script to verify all components and add sample data.
 
 import os
 import sys
+import tempfile
 
 def test_database():
     """Test database functionality."""
@@ -100,7 +101,7 @@ def test_utils():
         }
     ]
     
-    csv_path = export_to_csv(test_items, "/tmp/test_utils.csv")
+    csv_path = export_to_csv(test_items, os.path.join(tempfile.gettempdir(), "test_utils.csv"))
     assert os.path.exists(csv_path), "CSV file should be created"
     
     # Verify capitalization

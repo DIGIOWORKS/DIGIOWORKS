@@ -3,9 +3,7 @@ Web search module for item research.
 Simulates Terapeak-like search results for item research.
 """
 
-import requests
 from typing import List, Dict
-import json
 
 
 class WebSearcher:

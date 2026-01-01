@@ -4,7 +4,7 @@ Utility functions for the inventory management application.
 
 import csv
 import os
-from typing import List, Dict
+from typing import List, Dict, Tuple
 from datetime import datetime
 
 
@@ -52,7 +52,7 @@ def export_to_csv(items: List[Dict], filepath: str = None) -> str:
     return filepath
 
 
-def validate_item_data(title: str, price: str, quantity: str) -> tuple[bool, str]:
+def validate_item_data(title: str, price: str, quantity: str) -> Tuple[bool, str]:
     """
     Validate item data before saving.
     

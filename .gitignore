@@ -29,7 +29,8 @@ MANIFEST
 
 # PyInstaller
 *.manifest
-*.spec
+# Allow our custom spec file
+!inventory_app.spec
 
 # Virtual environments
 venv/

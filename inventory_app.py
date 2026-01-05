@@ -1,5 +1,5 @@
 """
-Main GUI application for Inventory Management System.
+Main GUI application for Invmachine.
 A standalone tool for researching, describing, and managing items for sale.
 """
 
@@ -34,7 +34,7 @@ class InventoryManagementApp(QMainWindow):
     
     def init_ui(self):
         """Initialize the user interface."""
-        self.setWindowTitle("Inventory Management System")
+        self.setWindowTitle("Invmachine")
         self.setGeometry(100, 100, 1400, 800)
         
         # Create central widget and main layout

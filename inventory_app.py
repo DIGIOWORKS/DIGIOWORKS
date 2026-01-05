@@ -5,14 +5,15 @@ A standalone tool for researching, describing, and managing items for sale.
 
 import sys
 import os
+from datetime import datetime
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
     QTabWidget, QPushButton, QLabel, QLineEdit, QTextEdit, QTableWidget,
     QTableWidgetItem, QFileDialog, QMessageBox, QComboBox, QSpinBox,
-    QDoubleSpinBox, QGroupBox, QListWidget, QSplitter, QHeaderView
+    QDoubleSpinBox, QGroupBox, QListWidget, QSplitter, QHeaderView, QSlider
 )
 from PyQt5.QtCore import Qt, QSize
-from PyQt5.QtGui import QPixmap, QIcon
+from PyQt5.QtGui import QPixmap, QIcon, QImage, QTransform
 
 from database import InventoryDatabase
 from web_search import WebSearcher
@@ -28,6 +29,14 @@ class InventoryManagementApp(QMainWindow):
         self.searcher = WebSearcher()
         self.current_image_path = ""
         self.current_item_id = None
+        
+        # Image Machine state
+        self.im_current_image = None
+        self.im_original_image = None
+        self.im_current_pixmap = None
+        self.im_brightness = 0
+        self.im_contrast = 0
+        self.im_rotation = 0
         
         self.init_ui()
         self.refresh_inventory_table()
@@ -57,6 +66,10 @@ class InventoryManagementApp(QMainWindow):
         # Tab 3: Web Search & Research
         self.search_tab = self.create_search_tab()
         tabs.addTab(self.search_tab, "Web Search & Research")
+        
+        # Tab 4: Image Machine
+        self.image_machine_tab = self.create_image_machine_tab()
+        tabs.addTab(self.image_machine_tab, "Image Machine")
         
         # Status bar
         self.statusBar().showMessage("Ready")
@@ -297,6 +310,375 @@ class InventoryManagementApp(QMainWindow):
         layout.addWidget(splitter)
         
         return widget
+    
+    def create_image_machine_tab(self):
+        """Create the Image Machine tab for image editing and manipulation."""
+        widget = QWidget()
+        layout = QHBoxLayout(widget)
+        
+        # Left panel: Tools and controls
+        left_panel = QVBoxLayout()
+        left_panel_widget = QWidget()
+        left_panel_widget.setLayout(left_panel)
+        left_panel_widget.setMaximumWidth(350)
+        
+        # File operations group
+        file_group = QGroupBox("File Operations")
+        file_layout = QVBoxLayout()
+        
+        load_btn = QPushButton("Load Image")
+        load_btn.setStyleSheet("background-color: #2196F3; color: white; padding: 10px;")
+        load_btn.clicked.connect(self.im_load_image)
+        file_layout.addWidget(load_btn)
+        
+        save_btn = QPushButton("Save Image")
+        save_btn.setStyleSheet("background-color: #4CAF50; color: white; padding: 10px;")
+        save_btn.clicked.connect(self.im_save_image)
+        file_layout.addWidget(save_btn)
+        
+        file_group.setLayout(file_layout)
+        left_panel.addWidget(file_group)
+        
+        # Transform operations group
+        transform_group = QGroupBox("Transform")
+        transform_layout = QVBoxLayout()
+        
+        rotate_layout = QHBoxLayout()
+        rotate_left_btn = QPushButton("↶ 90°")
+        rotate_left_btn.clicked.connect(lambda: self.im_rotate_image(-90))
+        rotate_layout.addWidget(rotate_left_btn)
+        
+        rotate_right_btn = QPushButton("↷ 90°")
+        rotate_right_btn.clicked.connect(lambda: self.im_rotate_image(90))
+        rotate_layout.addWidget(rotate_right_btn)
+        transform_layout.addLayout(rotate_layout)
+        
+        flip_layout = QHBoxLayout()
+        flip_h_btn = QPushButton("Flip Horizontal")
+        flip_h_btn.clicked.connect(lambda: self.im_flip_image(horizontal=True))
+        flip_layout.addWidget(flip_h_btn)
+        
+        flip_v_btn = QPushButton("Flip Vertical")
+        flip_v_btn.clicked.connect(lambda: self.im_flip_image(horizontal=False))
+        flip_layout.addWidget(flip_v_btn)
+        transform_layout.addLayout(flip_layout)
+        
+        transform_group.setLayout(transform_layout)
+        left_panel.addWidget(transform_group)
+        
+        # Adjustments group
+        adjust_group = QGroupBox("Adjustments")
+        adjust_layout = QVBoxLayout()
+        
+        # Brightness
+        brightness_label = QLabel("Brightness: 0")
+        self.im_brightness_label = brightness_label
+        adjust_layout.addWidget(brightness_label)
+        
+        brightness_slider = QSlider(Qt.Horizontal)
+        brightness_slider.setMinimum(-100)
+        brightness_slider.setMaximum(100)
+        brightness_slider.setValue(0)
+        brightness_slider.valueChanged.connect(self.im_adjust_brightness)
+        adjust_layout.addWidget(brightness_slider)
+        
+        # Contrast
+        contrast_label = QLabel("Contrast: 0")
+        self.im_contrast_label = contrast_label
+        adjust_layout.addWidget(contrast_label)
+        
+        contrast_slider = QSlider(Qt.Horizontal)
+        contrast_slider.setMinimum(-100)
+        contrast_slider.setMaximum(100)
+        contrast_slider.setValue(0)
+        contrast_slider.valueChanged.connect(self.im_adjust_contrast)
+        adjust_layout.addWidget(contrast_slider)
+        
+        adjust_group.setLayout(adjust_layout)
+        left_panel.addWidget(adjust_group)
+        
+        # Auto-naming group
+        naming_group = QGroupBox("Auto-Naming")
+        naming_layout = QVBoxLayout()
+        
+        naming_layout.addWidget(QLabel("Generated Name:"))
+        self.im_auto_name = QLineEdit()
+        self.im_auto_name.setPlaceholderText("Load an image to generate name")
+        self.im_auto_name.setReadOnly(False)
+        naming_layout.addWidget(self.im_auto_name)
+        
+        generate_name_btn = QPushButton("Generate Name")
+        generate_name_btn.setStyleSheet("background-color: #FF9800; color: white; padding: 8px;")
+        generate_name_btn.clicked.connect(self.im_generate_name)
+        naming_layout.addWidget(generate_name_btn)
+        
+        naming_group.setLayout(naming_layout)
+        left_panel.addWidget(naming_group)
+        
+        # Reset and clear buttons
+        action_layout = QHBoxLayout()
+        
+        reset_btn = QPushButton("Reset All")
+        reset_btn.clicked.connect(self.im_reset_image)
+        action_layout.addWidget(reset_btn)
+        
+        clear_btn = QPushButton("Clear Image")
+        clear_btn.setStyleSheet("background-color: #f44336; color: white;")
+        clear_btn.clicked.connect(self.im_clear_image)
+        action_layout.addWidget(clear_btn)
+        
+        left_panel.addLayout(action_layout)
+        left_panel.addStretch()
+        
+        layout.addWidget(left_panel_widget)
+        
+        # Right panel: Image display
+        right_panel = QVBoxLayout()
+        
+        # Image display area
+        image_display_group = QGroupBox("Image Preview")
+        image_display_layout = QVBoxLayout()
+        
+        self.im_image_label = QLabel()
+        self.im_image_label.setMinimumSize(800, 600)
+        self.im_image_label.setAlignment(Qt.AlignCenter)
+        self.im_image_label.setStyleSheet("border: 2px solid #ccc; background-color: #f0f0f0;")
+        self.im_image_label.setText("No image loaded\n\nClick 'Load Image' to begin")
+        image_display_layout.addWidget(self.im_image_label)
+        
+        # Image info
+        self.im_info_label = QLabel("Image info will appear here")
+        self.im_info_label.setStyleSheet("padding: 10px; background-color: #e0e0e0;")
+        image_display_layout.addWidget(self.im_info_label)
+        
+        image_display_group.setLayout(image_display_layout)
+        right_panel.addWidget(image_display_group)
+        
+        layout.addLayout(right_panel)
+        
+        return widget
+    
+    def im_load_image(self):
+        """Load an image in Image Machine."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select Image for Editing",
+            "",
+            "Image Files (*.png *.jpg *.jpeg *.bmp *.gif *.tiff)"
+        )
+        
+        if file_path:
+            try:
+                self.im_original_image = QImage(file_path)
+                if self.im_original_image.isNull():
+                    QMessageBox.warning(self, "Load Error", "Failed to load image.")
+                    return
+                
+                self.im_current_image = self.im_original_image.copy()
+                self.im_brightness = 0
+                self.im_contrast = 0
+                self.im_rotation = 0
+                
+                self.im_display_image()
+                self.im_update_info(file_path)
+                self.im_generate_name()
+                self.statusBar().showMessage(f"Loaded: {os.path.basename(file_path)}")
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Error loading image: {str(e)}")
+    
+    def im_display_image(self):
+        """Display the current image in Image Machine."""
+        if self.im_current_image is None or self.im_current_image.isNull():
+            return
+        
+        pixmap = QPixmap.fromImage(self.im_current_image)
+        scaled_pixmap = pixmap.scaled(
+            self.im_image_label.size(),
+            Qt.KeepAspectRatio,
+            Qt.SmoothTransformation
+        )
+        self.im_image_label.setPixmap(scaled_pixmap)
+    
+    def im_update_info(self, file_path=""):
+        """Update image information display."""
+        if self.im_current_image is None or self.im_current_image.isNull():
+            self.im_info_label.setText("No image loaded")
+            return
+        
+        width = self.im_current_image.width()
+        height = self.im_current_image.height()
+        
+        info_text = f"Size: {width} x {height} px"
+        if file_path:
+            file_size = os.path.getsize(file_path) / 1024  # KB
+            info_text += f" | File: {os.path.basename(file_path)} ({file_size:.1f} KB)"
+        
+        self.im_info_label.setText(info_text)
+    
+    def im_rotate_image(self, angle):
+        """Rotate the image."""
+        if self.im_current_image is None or self.im_current_image.isNull():
+            QMessageBox.warning(self, "No Image", "Please load an image first.")
+            return
+        
+        transform = QTransform()
+        transform.rotate(angle)
+        self.im_current_image = self.im_current_image.transformed(transform, Qt.SmoothTransformation)
+        self.im_rotation = (self.im_rotation + angle) % 360
+        self.im_display_image()
+        self.im_update_info()
+        self.statusBar().showMessage(f"Rotated {angle}°")
+    
+    def im_flip_image(self, horizontal=True):
+        """Flip the image horizontally or vertically."""
+        if self.im_current_image is None or self.im_current_image.isNull():
+            QMessageBox.warning(self, "No Image", "Please load an image first.")
+            return
+        
+        self.im_current_image = self.im_current_image.mirrored(horizontal, not horizontal)
+        self.im_display_image()
+        direction = "horizontally" if horizontal else "vertically"
+        self.statusBar().showMessage(f"Flipped {direction}")
+    
+    def im_adjust_brightness(self, value):
+        """Adjust image brightness."""
+        if self.im_original_image is None or self.im_original_image.isNull():
+            return
+        
+        self.im_brightness = value
+        self.im_brightness_label.setText(f"Brightness: {value}")
+        self.im_apply_adjustments()
+    
+    def im_adjust_contrast(self, value):
+        """Adjust image contrast."""
+        if self.im_original_image is None or self.im_original_image.isNull():
+            return
+        
+        self.im_contrast = value
+        self.im_contrast_label.setText(f"Contrast: {value}")
+        self.im_apply_adjustments()
+    
+    def im_apply_adjustments(self):
+        """Apply brightness and contrast adjustments."""
+        if self.im_original_image is None or self.im_original_image.isNull():
+            return
+        
+        # Start from original image
+        self.im_current_image = self.im_original_image.copy()
+        
+        # Apply brightness and contrast using pixel manipulation
+        # This is a simplified implementation
+        if self.im_brightness != 0 or self.im_contrast != 0:
+            width = self.im_current_image.width()
+            height = self.im_current_image.height()
+            
+            # Brightness factor: -100 to 100 -> -255 to 255 adjustment
+            b_factor = int(self.im_brightness * 2.55)
+            
+            # Contrast factor: -100 to 100 -> 0.0 to 2.0 multiplier
+            c_factor = (self.im_contrast + 100) / 100.0
+            
+            for y in range(height):
+                for x in range(width):
+                    pixel = self.im_current_image.pixelColor(x, y)
+                    
+                    # Apply contrast then brightness
+                    r = max(0, min(255, int((pixel.red() - 128) * c_factor + 128 + b_factor)))
+                    g = max(0, min(255, int((pixel.green() - 128) * c_factor + 128 + b_factor)))
+                    b = max(0, min(255, int((pixel.blue() - 128) * c_factor + 128 + b_factor)))
+                    
+                    pixel.setRgb(r, g, b)
+                    self.im_current_image.setPixelColor(x, y, pixel)
+        
+        self.im_display_image()
+    
+    def im_generate_name(self):
+        """Generate an automatic name for the image."""
+        if self.im_current_image is None or self.im_current_image.isNull():
+            self.im_auto_name.setText("")
+            return
+        
+        # Generate name based on image properties and timestamp
+        width = self.im_current_image.width()
+        height = self.im_current_image.height()
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        # Determine orientation
+        if width > height:
+            orientation = "landscape"
+        elif height > width:
+            orientation = "portrait"
+        else:
+            orientation = "square"
+        
+        # Generate descriptive name
+        name = f"image_{orientation}_{width}x{height}_{timestamp}"
+        
+        self.im_auto_name.setText(name)
+        self.statusBar().showMessage("Auto-name generated")
+    
+    def im_reset_image(self):
+        """Reset image to original state."""
+        if self.im_original_image is None or self.im_original_image.isNull():
+            QMessageBox.warning(self, "No Image", "Please load an image first.")
+            return
+        
+        self.im_current_image = self.im_original_image.copy()
+        self.im_brightness = 0
+        self.im_contrast = 0
+        self.im_rotation = 0
+        
+        # Reset UI controls (would need references to sliders)
+        self.im_brightness_label.setText("Brightness: 0")
+        self.im_contrast_label.setText("Contrast: 0")
+        
+        self.im_display_image()
+        self.im_update_info()
+        self.statusBar().showMessage("Image reset to original")
+    
+    def im_clear_image(self):
+        """Clear the current image."""
+        self.im_current_image = None
+        self.im_original_image = None
+        self.im_current_pixmap = None
+        self.im_brightness = 0
+        self.im_contrast = 0
+        self.im_rotation = 0
+        
+        self.im_image_label.clear()
+        self.im_image_label.setText("No image loaded\n\nClick 'Load Image' to begin")
+        self.im_info_label.setText("Image info will appear here")
+        self.im_auto_name.setText("")
+        
+        self.statusBar().showMessage("Image cleared")
+    
+    def im_save_image(self):
+        """Save the edited image."""
+        if self.im_current_image is None or self.im_current_image.isNull():
+            QMessageBox.warning(self, "No Image", "No image to save.")
+            return
+        
+        # Suggest filename from auto-name
+        suggested_name = self.im_auto_name.text()
+        if not suggested_name:
+            suggested_name = "edited_image"
+        
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Image",
+            suggested_name + ".png",
+            "PNG (*.png);;JPEG (*.jpg *.jpeg);;BMP (*.bmp);;All Files (*)"
+        )
+        
+        if file_path:
+            try:
+                if self.im_current_image.save(file_path):
+                    QMessageBox.information(self, "Success", f"Image saved to:\n{file_path}")
+                    self.statusBar().showMessage(f"Saved: {os.path.basename(file_path)}")
+                else:
+                    QMessageBox.critical(self, "Error", "Failed to save image.")
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Error saving image: {str(e)}")
     
     def upload_photo(self):
         """Handle photo upload."""

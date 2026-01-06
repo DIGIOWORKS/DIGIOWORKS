@@ -10,7 +10,7 @@ from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
     QTabWidget, QPushButton, QLabel, QLineEdit, QTextEdit, QTableWidget,
     QTableWidgetItem, QFileDialog, QMessageBox, QComboBox, QSpinBox,
-    QDoubleSpinBox, QGroupBox, QListWidget, QSplitter, QHeaderView, QSlider
+    QDoubleSpinBox, QGroupBox, QListWidget, QListWidgetItem, QSplitter, QHeaderView, QSlider
 )
 from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtGui import QPixmap, QIcon, QImage, QTransform
@@ -117,6 +117,26 @@ class InventoryManagementApp(QMainWindow):
         
         # Right side: Item details form
         right_panel = QVBoxLayout()
+        
+        # Search bar for existing items
+        search_group = QGroupBox("Quick Item Search")
+        search_layout = QHBoxLayout()
+        
+        search_layout.addWidget(QLabel("Search:"))
+        self.item_search_input = QLineEdit()
+        self.item_search_input.setPlaceholderText("Search existing items by title or category")
+        self.item_search_input.textChanged.connect(self.search_items_for_input)
+        search_layout.addWidget(self.item_search_input)
+        
+        search_group.setLayout(search_layout)
+        right_panel.addWidget(search_group)
+        
+        # Search results dropdown
+        self.item_search_results = QListWidget()
+        self.item_search_results.setMaximumHeight(120)
+        self.item_search_results.setVisible(False)
+        self.item_search_results.itemClicked.connect(self.load_item_from_search)
+        right_panel.addWidget(self.item_search_results)
         
         details_group = QGroupBox("Item Details")
         details_layout = QVBoxLayout()
@@ -777,6 +797,66 @@ class InventoryManagementApp(QMainWindow):
         self.description_input.clear()
         self.clear_image()
         self.current_item_id = None
+        self.item_search_input.clear()
+        self.item_search_results.setVisible(False)
+    
+    def search_items_for_input(self):
+        """Search for items in the item input tab."""
+        search_term = self.item_search_input.text().strip()
+        
+        if not search_term or len(search_term) < 2:
+            self.item_search_results.setVisible(False)
+            self.item_search_results.clear()
+            return
+        
+        # Search in database
+        items = self.db.search_items(search_term)
+        
+        self.item_search_results.clear()
+        
+        if items:
+            self.item_search_results.setVisible(True)
+            for item in items[:10]:  # Limit to 10 results
+                display_text = f"{item['title']} - ${item['price']:.2f} (ID: {item['id']})"
+                list_item = QListWidgetItem(display_text)
+                list_item.setData(Qt.UserRole, item['id'])
+                self.item_search_results.addItem(list_item)
+        else:
+            self.item_search_results.setVisible(False)
+    
+    def load_item_from_search(self, item):
+        """Load an item into the form from search results."""
+        item_id = item.data(Qt.UserRole)
+        
+        if item_id:
+            db_item = self.db.get_item(item_id)
+            
+            if db_item:
+                self.current_item_id = item_id
+                
+                # Populate form
+                self.title_input.setText(db_item['title'])
+                self.price_input.setValue(db_item['price'])
+                self.quantity_input.setValue(db_item['quantity'])
+                
+                # Set condition
+                condition_index = self.condition_input.findText(db_item.get('condition', ''))
+                if condition_index >= 0:
+                    self.condition_input.setCurrentIndex(condition_index)
+                
+                self.category_input.setText(db_item.get('category', ''))
+                self.description_input.setPlainText(db_item.get('description', ''))
+                
+                # Load image if exists
+                if db_item.get('image_path') and os.path.exists(db_item['image_path']):
+                    self.current_image_path = db_item['image_path']
+                    self.display_image(db_item['image_path'])
+                
+                # Hide search results
+                self.item_search_results.setVisible(False)
+                self.item_search_input.clear()
+                
+                self.statusBar().showMessage(f"Loaded item: {db_item['title']}")
     
     def refresh_inventory_table(self):
         """Refresh the inventory table with current data."""

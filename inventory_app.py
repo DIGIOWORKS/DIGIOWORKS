@@ -53,11 +53,10 @@ class SettingsDialog(QDialog):
         form_layout = QFormLayout()
         form_layout.setSpacing(15)
         
-        # App ID field (pre-filled, read-only)
+        # App ID field (editable, pre-filled with default)
         self.app_id_input = QLineEdit()
         self.app_id_input.setText("comusedcom@gmail.com")
-        self.app_id_input.setReadOnly(True)
-        self.app_id_input.setStyleSheet("background-color: #f5f5f5;")
+        self.app_id_input.setPlaceholderText("Enter your eBay App ID (Client ID)")
         form_layout.addRow("App ID (Client ID):", self.app_id_input)
         
         # Cert ID field (password input)
@@ -116,6 +115,10 @@ class SettingsDialog(QDialog):
                 with open(self.CONFIG_FILE, 'r') as f:
                     config = json.load(f)
                 
+                # Load app_id if it exists
+                if 'app_id' in config:
+                    self.app_id_input.setText(config['app_id'])
+                
                 # Decode cert_id if it exists
                 if 'cert_id' in config:
                     cert_id = base64.b64decode(config['cert_id']).decode('utf-8')
@@ -129,7 +132,16 @@ class SettingsDialog(QDialog):
     
     def save_settings(self):
         """Save settings to config file."""
+        app_id = self.app_id_input.text().strip()
         cert_id = self.cert_id_input.text().strip()
+        
+        if not app_id:
+            QMessageBox.warning(
+                self,
+                "Validation Error",
+                "Please enter your eBay App ID (Client ID)."
+            )
+            return
         
         if not cert_id:
             QMessageBox.warning(
@@ -144,7 +156,7 @@ class SettingsDialog(QDialog):
             encoded_cert_id = base64.b64encode(cert_id.encode('utf-8')).decode('utf-8')
             
             config = {
-                'app_id': self.app_id_input.text(),
+                'app_id': app_id,
                 'cert_id': encoded_cert_id
             }
             

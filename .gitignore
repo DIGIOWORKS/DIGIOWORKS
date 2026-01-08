@@ -57,6 +57,7 @@ Thumbs.db
 uploads/
 exports/
 *.csv
+ebay_config.json
 
 # Logs
 *.log

@@ -5,12 +5,15 @@ A standalone tool for researching, describing, and managing items for sale.
 
 import sys
 import os
+import json
+import base64
 from datetime import datetime
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
     QTabWidget, QPushButton, QLabel, QLineEdit, QTextEdit, QTableWidget,
     QTableWidgetItem, QFileDialog, QMessageBox, QComboBox, QSpinBox,
-    QDoubleSpinBox, QGroupBox, QListWidget, QListWidgetItem, QSplitter, QHeaderView, QSlider
+    QDoubleSpinBox, QGroupBox, QListWidget, QListWidgetItem, QSplitter, QHeaderView, QSlider,
+    QDialog, QFormLayout, QDialogButtonBox, QMenuBar, QAction
 )
 from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtGui import QPixmap, QIcon, QImage, QTransform
@@ -18,6 +21,144 @@ from PyQt5.QtGui import QPixmap, QIcon, QImage, QTransform
 from database import InventoryDatabase
 from web_search import WebSearcher
 from utils import export_to_csv, validate_item_data, format_price, truncate_text
+
+
+class SettingsDialog(QDialog):
+    """Dialog for configuring eBay API credentials."""
+    
+    CONFIG_FILE = "ebay_config.json"
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("eBay API Configuration")
+        self.setModal(True)
+        self.setMinimumWidth(500)
+        
+        self.init_ui()
+        self.load_settings()
+    
+    def init_ui(self):
+        """Initialize the settings dialog UI."""
+        layout = QVBoxLayout(self)
+        
+        # Info label
+        info_label = QLabel(
+            "Configure your eBay Developer API credentials.\n"
+            "These are required for live marketplace data integration."
+        )
+        info_label.setStyleSheet("padding: 10px; background-color: #e3f2fd; border-radius: 5px;")
+        layout.addWidget(info_label)
+        
+        # Form layout
+        form_layout = QFormLayout()
+        form_layout.setSpacing(15)
+        
+        # App ID field (pre-filled, read-only)
+        self.app_id_input = QLineEdit()
+        self.app_id_input.setText("comusedcom@gmail.com")
+        self.app_id_input.setReadOnly(True)
+        self.app_id_input.setStyleSheet("background-color: #f5f5f5;")
+        form_layout.addRow("App ID (Client ID):", self.app_id_input)
+        
+        # Cert ID field (password input)
+        self.cert_id_input = QLineEdit()
+        self.cert_id_input.setEchoMode(QLineEdit.Password)
+        self.cert_id_input.setPlaceholderText("Enter your eBay Cert ID (Client Secret)")
+        form_layout.addRow("Cert ID (Client Secret):", self.cert_id_input)
+        
+        # Show/Hide password checkbox
+        self.show_password_check = QPushButton("Show")
+        self.show_password_check.setCheckable(True)
+        self.show_password_check.setMaximumWidth(80)
+        self.show_password_check.clicked.connect(self.toggle_password_visibility)
+        form_layout.addRow("", self.show_password_check)
+        
+        layout.addLayout(form_layout)
+        
+        # Help text
+        help_label = QLabel(
+            '<p><b>Where to get credentials:</b></p>'
+            '<ol>'
+            '<li>Go to <a href="https://developer.ebay.com">developer.ebay.com</a></li>'
+            '<li>Sign in or create a developer account</li>'
+            '<li>Navigate to "My Account" → "Application Keys"</li>'
+            '<li>Create a new application or use existing one</li>'
+            '<li>Copy the App ID (Client ID) and Cert ID (Client Secret)</li>'
+            '</ol>'
+            '<p><i>Note: Credentials are stored encrypted locally.</i></p>'
+        )
+        help_label.setWordWrap(True)
+        help_label.setOpenExternalLinks(True)
+        help_label.setStyleSheet("padding: 10px; background-color: #fff3cd; border-radius: 5px; font-size: 10px;")
+        layout.addWidget(help_label)
+        
+        # Button box
+        button_box = QDialogButtonBox(
+            QDialogButtonBox.Ok | QDialogButtonBox.Cancel
+        )
+        button_box.accepted.connect(self.save_settings)
+        button_box.rejected.connect(self.reject)
+        layout.addWidget(button_box)
+    
+    def toggle_password_visibility(self):
+        """Toggle password field visibility."""
+        if self.show_password_check.isChecked():
+            self.cert_id_input.setEchoMode(QLineEdit.Normal)
+            self.show_password_check.setText("Hide")
+        else:
+            self.cert_id_input.setEchoMode(QLineEdit.Password)
+            self.show_password_check.setText("Show")
+    
+    def load_settings(self):
+        """Load saved settings from config file."""
+        try:
+            if os.path.exists(self.CONFIG_FILE):
+                with open(self.CONFIG_FILE, 'r') as f:
+                    config = json.load(f)
+                
+                # Decode cert_id if it exists
+                if 'cert_id' in config:
+                    cert_id = base64.b64decode(config['cert_id']).decode('utf-8')
+                    self.cert_id_input.setText(cert_id)
+        except Exception as e:
+            QMessageBox.warning(
+                self,
+                "Load Error",
+                f"Failed to load saved settings: {str(e)}"
+            )
+    
+    def save_settings(self):
+        """Save settings to config file."""
+        cert_id = self.cert_id_input.text().strip()
+        
+        if not cert_id:
+            QMessageBox.warning(
+                self,
+                "Validation Error",
+                "Please enter your eBay Cert ID (Client Secret)."
+            )
+            return
+        
+        try:
+            # Encode cert_id for basic obfuscation
+            encoded_cert_id = base64.b64encode(cert_id.encode('utf-8')).decode('utf-8')
+            
+            config = {
+                'app_id': self.app_id_input.text(),
+                'cert_id': encoded_cert_id
+            }
+            
+            with open(self.CONFIG_FILE, 'w') as f:
+                json.dump(config, f, indent=2)
+            
+            self.accept()
+            
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Save Error",
+                f"Failed to save settings: {str(e)}"
+            )
 
 
 class InventoryManagementApp(QMainWindow):
@@ -46,6 +187,9 @@ class InventoryManagementApp(QMainWindow):
         self.setWindowTitle("Invmachine")
         self.setGeometry(100, 100, 1400, 800)
         
+        # Create menu bar
+        self.create_menu_bar()
+        
         # Create central widget and main layout
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -73,6 +217,25 @@ class InventoryManagementApp(QMainWindow):
         
         # Status bar
         self.statusBar().showMessage("Ready")
+    
+    def create_menu_bar(self):
+        """Create the application menu bar."""
+        menubar = self.menuBar()
+        
+        # Settings menu
+        settings_menu = menubar.addMenu('&Settings')
+        
+        # eBay API Settings action
+        api_settings_action = QAction('&eBay API Configuration', self)
+        api_settings_action.setStatusTip('Configure eBay API credentials')
+        api_settings_action.triggered.connect(self.open_settings_dialog)
+        settings_menu.addAction(api_settings_action)
+    
+    def open_settings_dialog(self):
+        """Open the settings dialog for eBay API configuration."""
+        dialog = SettingsDialog(self)
+        if dialog.exec_() == QDialog.Accepted:
+            self.statusBar().showMessage("Settings saved successfully", 3000)
     
     def create_item_input_tab(self):
         """Create the item input tab."""

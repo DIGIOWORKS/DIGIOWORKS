@@ -21,6 +21,7 @@ from PyQt5.QtGui import QPixmap, QIcon, QImage, QTransform
 from database import InventoryDatabase
 from web_search import WebSearcher
 from utils import export_to_csv, validate_item_data, format_price, truncate_text
+from ebay_api import eBayAPIClient
 
 
 class SettingsDialog(QDialog):
@@ -180,6 +181,7 @@ class InventoryManagementApp(QMainWindow):
         super().__init__()
         self.db = InventoryDatabase()
         self.searcher = WebSearcher()
+        self.ebay_client = eBayAPIClient()
         self.current_image_path = ""
         self.current_item_id = None
         
@@ -1179,7 +1181,7 @@ class InventoryManagementApp(QMainWindow):
                 QMessageBox.critical(self, "Export Error", f"Failed to export: {str(e)}")
     
     def perform_web_search(self):
-        """Perform web search for item research."""
+        """Perform web search for item research using eBay API and Terapeak simulation."""
         query = self.web_search_input.text().strip()
         
         if not query:
@@ -1192,29 +1194,89 @@ class InventoryManagementApp(QMainWindow):
         for suggestion in suggestions:
             self.suggestions_list.addItem(suggestion)
         
-        # Get market research results
-        results = self.searcher.simulate_terapeak_search(query)
-        
-        # Format and display results
+        # Start building results HTML
         results_html = f"<h2>Market Research: {query}</h2>"
         results_html += "<hr>"
         
-        for result in results:
+        # Try to get eBay API results if configured
+        if self.ebay_client.is_configured():
+            try:
+                # Get completed/sold items from eBay
+                sold_items = self.ebay_client.search_completed_items(query, max_results=5)
+                
+                if sold_items:
+                    results_html += "<h3 style='color: #2196F3;'>eBay Sold Listings (Recent)</h3>"
+                    for item in sold_items:
+                        results_html += f"""
+                        <div style="margin-bottom: 15px; padding: 10px; background-color: #e8f5e9; border-left: 4px solid #4CAF50;">
+                            <p><strong>{item.get('title', 'Unknown')}</strong></p>
+                            <p><strong>Price:</strong> ${item.get('price', 0):.2f} {item.get('currency', 'USD')}</p>
+                            <p><strong>Condition:</strong> {item.get('condition', 'N/A')}</p>
+                            <p><strong>Sold Date:</strong> {item.get('sold_date', 'N/A')}</p>
+                            <p><strong>Shipping:</strong> ${item.get('shipping_cost', 0):.2f}</p>
+                            <p><a href="{item.get('url', '#')}" target="_blank">View Listing</a></p>
+                        </div>
+                        """
+                    results_html += "<hr>"
+                
+                # Get active listings from eBay
+                active_items = self.ebay_client.search_active_listings(query, max_results=5)
+                
+                if active_items:
+                    results_html += "<h3 style='color: #FF9800;'>eBay Active Listings (Current)</h3>"
+                    for item in active_items:
+                        results_html += f"""
+                        <div style="margin-bottom: 15px; padding: 10px; background-color: #fff3cd; border-left: 4px solid #FF9800;">
+                            <p><strong>{item.get('title', 'Unknown')}</strong></p>
+                            <p><strong>Price:</strong> ${item.get('price', 0):.2f} {item.get('currency', 'USD')}</p>
+                            <p><strong>Condition:</strong> {item.get('condition', 'N/A')}</p>
+                            <p><strong>Seller:</strong> {item.get('seller', 'N/A')}</p>
+                            <p><strong>Location:</strong> {item.get('location', 'N/A')}</p>
+                            <p><a href="{item.get('url', '#')}" target="_blank">View Listing</a></p>
+                        </div>
+                        """
+                    results_html += "<hr>"
+                
+                self.statusBar().showMessage(f"Search completed with eBay API data for: {query}")
+            
+            except Exception as e:
+                results_html += f"""
+                <div style="padding: 10px; background-color: #ffebee; border-left: 4px solid #f44336;">
+                    <p><strong>eBay API Error:</strong> {str(e)}</p>
+                    <p>Falling back to simulated data...</p>
+                </div>
+                <hr>
+                """
+                self.statusBar().showMessage(f"eBay API error - using simulated data for: {query}")
+        else:
+            results_html += """
+            <div style="padding: 10px; background-color: #e3f2fd; border-left: 4px solid #2196F3;">
+                <p><strong>Note:</strong> eBay API not configured. Showing simulated data.</p>
+                <p>To enable live marketplace data, go to Settings → eBay API Configuration</p>
+            </div>
+            <hr>
+            """
+        
+        # Get Terapeak simulation data
+        terapeak_data = self.ebay_client.get_simulated_terapeak_data(query)
+        
+        results_html += "<h3 style='color: #9C27B0;'>Terapeak Market Analysis (Simulated)</h3>"
+        for result in terapeak_data:
             results_html += f"""
-            <div style="margin-bottom: 20px; padding: 10px; background-color: #f9f9f9; border-left: 4px solid #2196F3;">
-                <h3>{result['title_sample']}</h3>
-                <p><strong>Condition:</strong> {result['condition']}</p>
-                <p><strong>Average Price:</strong> ${result['avg_price']:.2f}</p>
-                <p><strong>Price Range:</strong> ${result['price_range']['min']:.2f} - ${result['price_range']['max']:.2f}</p>
-                <p><strong>Average Shipping:</strong> ${result['avg_shipping']:.2f}</p>
-                <p><strong>Sell-Through Rate:</strong> {result['sell_through_rate']}%</p>
-                <p><strong>Average Days to Sell:</strong> {result['avg_days_to_sell']} days</p>
-                <p><strong>Total Listings:</strong> {result['total_listings']} | <strong>Total Sold:</strong> {result['total_sold']}</p>
+            <div style="margin-bottom: 15px; padding: 10px; background-color: #f3e5f5; border-left: 4px solid #9C27B0;">
+                <h4>{result['condition']}</h4>
+                <p><strong>Average Sold Price:</strong> ${result['avg_sold_price']:.2f}</p>
+                <p><strong>Price Range:</strong> ${result['min_price']:.2f} - ${result['max_price']:.2f}</p>
+                <p><strong>Total Sold:</strong> {result['total_sold']}</p>
+                <p><strong>Sell-Through Rate:</strong> {result['sell_through_rate']:.1f}%</p>
+                <p><strong>Average Days to Sell:</strong> {result['avg_days_to_sell']}</p>
             </div>
             """
         
         self.results_text.setHtml(results_html)
-        self.statusBar().showMessage(f"Search completed for: {query}")
+        
+        if not self.ebay_client.is_configured():
+            self.statusBar().showMessage(f"Search completed (simulated data) for: {query}")
     
     def on_suggestion_clicked(self, item):
         """Handle click on search suggestion."""

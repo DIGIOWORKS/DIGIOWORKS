@@ -220,8 +220,55 @@ class eBayAPIClient:
     def is_configured(self) -> bool:
         """Check if API credentials are configured."""
         return bool(self.app_id and self.cert_id)
+    
+    def get_simulated_terapeak_data(self, query: str) -> List[Dict]:
+        """
+        Generate simulated Terapeak-style market research data.
+        This is used as a fallback when eBay API is not configured.
+        
+        Args:
+            query: Search query string
+            
+        Returns:
+            List of simulated market data dictionaries
+        """
+        import random
+        
+        # Base conditions and their price multipliers
+        conditions = {
+            'New': 1.0,
+            'Open box': 0.85,
+            'Certified Refurbished': 0.75,
+            'Used - Like New': 0.70,
+            'Used - Very Good': 0.60,
+            'Used - Good': 0.50,
+            'Used - Acceptable': 0.40,
+            'For parts or not working': 0.25
+        }
+        
+        results = []
+        base_price = random.uniform(50, 500)
+        
+        for condition, multiplier in conditions.items():
+            avg_price = base_price * multiplier
+            price_variance = avg_price * 0.15
+            
+            result = {
+                'condition': condition,
+                'avg_sold_price': round(avg_price + random.uniform(-price_variance, price_variance), 2),
+                'min_price': round(avg_price * 0.7, 2),
+                'max_price': round(avg_price * 1.3, 2),
+                'total_sold': random.randint(50, 500),
+                'sell_through_rate': round(random.uniform(0.45, 0.95), 2),
+                'avg_days_to_sell': random.randint(3, 45),
+                'source': 'Terapeak Simulation'
+            }
+            results.append(result)
+        
+        return results
 
 
+# Keep the standalone function for backward compatibility
 def get_simulated_terapeak_data(query: str) -> List[Dict]:
     """
     Generate simulated Terapeak-style market research data.

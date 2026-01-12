@@ -39,10 +39,19 @@ class InventoryDatabase:
                 description TEXT,
                 category TEXT,
                 image_path TEXT,
+                status TEXT DEFAULT 'active',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        
+        # Migrate existing databases to add status column
+        try:
+            cursor.execute("SELECT status FROM inventory LIMIT 1")
+        except sqlite3.OperationalError:
+            # Column doesn't exist, add it
+            cursor.execute("ALTER TABLE inventory ADD COLUMN status TEXT DEFAULT 'active'")
+            cursor.execute("UPDATE inventory SET status = 'active' WHERE status IS NULL")
         
         # Create listing number table for synchronization
         cursor.execute("""
@@ -59,15 +68,16 @@ class InventoryDatabase:
         conn.close()
     
     def add_item(self, title: str, price: float, quantity: int, condition: str = "",
-                 description: str = "", category: str = "", image_path: str = "") -> int:
+                 description: str = "", category: str = "", image_path: str = "", 
+                 status: str = "active") -> int:
         """Add a new item to inventory."""
         conn = self.get_connection()
         cursor = conn.cursor()
         
         cursor.execute("""
-            INSERT INTO inventory (title, price, quantity, condition, description, category, image_path)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (title, price, quantity, condition, description, category, image_path))
+            INSERT INTO inventory (title, price, quantity, condition, description, category, image_path, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (title, price, quantity, condition, description, category, image_path, status))
         
         item_id = cursor.lastrowid
         conn.commit()
@@ -77,7 +87,7 @@ class InventoryDatabase:
     
     def update_item(self, item_id: int, title: str, price: float, quantity: int,
                    condition: str = "", description: str = "", category: str = "",
-                   image_path: str = "") -> bool:
+                   image_path: str = "", status: str = "active") -> bool:
         """Update an existing inventory item."""
         conn = self.get_connection()
         cursor = conn.cursor()
@@ -85,10 +95,10 @@ class InventoryDatabase:
         cursor.execute("""
             UPDATE inventory
             SET title = ?, price = ?, quantity = ?, condition = ?, 
-                description = ?, category = ?, image_path = ?, 
+                description = ?, category = ?, image_path = ?, status = ?,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
-        """, (title, price, quantity, condition, description, category, image_path, item_id))
+        """, (title, price, quantity, condition, description, category, image_path, status, item_id))
         
         affected = cursor.rowcount
         conn.commit()
@@ -146,6 +156,40 @@ class InventoryDatabase:
             WHERE title LIKE ? OR description LIKE ? OR category LIKE ?
             ORDER BY created_at DESC
         """, (search_pattern, search_pattern, search_pattern))
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        return [dict(row) for row in rows]
+    
+    def get_items_by_status(self, status: str) -> List[Dict]:
+        """Get inventory items filtered by status (active, sold, draft)."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT * FROM inventory 
+            WHERE status = ?
+            ORDER BY created_at DESC
+        """, (status,))
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        return [dict(row) for row in rows]
+    
+    def search_items_by_status(self, search_term: str, status: str) -> List[Dict]:
+        """Search inventory items by title/description/category and filter by status."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        search_pattern = f"%{search_term}%"
+        cursor.execute("""
+            SELECT * FROM inventory 
+            WHERE (title LIKE ? OR description LIKE ? OR category LIKE ?)
+            AND status = ?
+            ORDER BY created_at DESC
+        """, (search_pattern, search_pattern, search_pattern, status))
         
         rows = cursor.fetchall()
         conn.close()

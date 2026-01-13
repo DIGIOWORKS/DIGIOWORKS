@@ -1257,22 +1257,6 @@ class InventoryManagementApp(QMainWindow):
             <hr>
             """
         
-        # Get Terapeak simulation data
-        terapeak_data = self.ebay_client.get_simulated_terapeak_data(query)
-        
-        results_html += "<h3 style='color: #9C27B0;'>Terapeak Market Analysis (Simulated)</h3>"
-        for result in terapeak_data:
-            results_html += f"""
-            <div style="margin-bottom: 15px; padding: 10px; background-color: #f3e5f5; border-left: 4px solid #9C27B0;">
-                <h4>{result['condition']}</h4>
-                <p><strong>Average Sold Price:</strong> ${result['avg_sold_price']:.2f}</p>
-                <p><strong>Price Range:</strong> ${result['min_price']:.2f} - ${result['max_price']:.2f}</p>
-                <p><strong>Total Sold:</strong> {result['total_sold']}</p>
-                <p><strong>Sell-Through Rate:</strong> {result['sell_through_rate']:.1f}%</p>
-                <p><strong>Average Days to Sell:</strong> {result['avg_days_to_sell']}</p>
-            </div>
-            """
-        
         self.results_text.setHtml(results_html)
         
         if not self.ebay_client.is_configured():

@@ -478,21 +478,7 @@ class InventoryManagementApp(QMainWindow):
         search_section.setLayout(search_layout)
         layout.addWidget(search_section)
         
-        # Splitter for suggestions and results
-        splitter = QSplitter(Qt.Horizontal)
-        
-        # Left: Search suggestions
-        suggestions_group = QGroupBox("Search Suggestions")
-        suggestions_layout = QVBoxLayout()
-        
-        self.suggestions_list = QListWidget()
-        self.suggestions_list.itemClicked.connect(self.on_suggestion_clicked)
-        suggestions_layout.addWidget(self.suggestions_list)
-        
-        suggestions_group.setLayout(suggestions_layout)
-        splitter.addWidget(suggestions_group)
-        
-        # Right: Market research results
+        # Market research results (full width, no suggestions panel)
         results_group = QGroupBox("Market Research Results (Terapeak-style)")
         results_layout = QVBoxLayout()
         
@@ -501,10 +487,7 @@ class InventoryManagementApp(QMainWindow):
         results_layout.addWidget(self.results_text)
         
         results_group.setLayout(results_layout)
-        splitter.addWidget(results_group)
-        
-        splitter.setSizes([400, 800])
-        layout.addWidget(splitter)
+        layout.addWidget(results_group)
         
         return widget
     
@@ -1188,12 +1171,6 @@ class InventoryManagementApp(QMainWindow):
             QMessageBox.warning(self, "Input Required", "Please enter a search query.")
             return
         
-        # Generate suggestions
-        suggestions = self.searcher.generate_search_suggestions(query)
-        self.suggestions_list.clear()
-        for suggestion in suggestions:
-            self.suggestions_list.addItem(suggestion)
-        
         # Start building results HTML
         results_html = f"<h2>Market Research: {query}</h2>"
         results_html += "<hr>"
@@ -1261,12 +1238,6 @@ class InventoryManagementApp(QMainWindow):
         
         if not self.ebay_client.is_configured():
             self.statusBar().showMessage(f"Search completed (simulated data) for: {query}")
-    
-    def on_suggestion_clicked(self, item):
-        """Handle click on search suggestion."""
-        suggestion_text = item.text()
-        self.web_search_input.setText(suggestion_text)
-        self.perform_web_search()
 
 
 def main():

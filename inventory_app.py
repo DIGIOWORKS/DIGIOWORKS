@@ -478,16 +478,36 @@ class InventoryManagementApp(QMainWindow):
         search_section.setLayout(search_layout)
         layout.addWidget(search_section)
         
-        # Market research results (full width, no suggestions panel)
-        results_group = QGroupBox("Market Research Results (Terapeak-style)")
-        results_layout = QVBoxLayout()
+        # Market research results - split into two panels
+        # Create a splitter to hold two result panels
+        results_splitter = QSplitter(Qt.Horizontal)
         
-        self.results_text = QTextEdit()
-        self.results_text.setReadOnly(True)
-        results_layout.addWidget(self.results_text)
+        # Left panel: Active/Running Listings
+        active_group = QGroupBox("Active Listings (Running)")
+        active_layout = QVBoxLayout()
         
-        results_group.setLayout(results_layout)
-        layout.addWidget(results_group)
+        self.active_results_text = QTextEdit()
+        self.active_results_text.setReadOnly(True)
+        active_layout.addWidget(self.active_results_text)
+        
+        active_group.setLayout(active_layout)
+        results_splitter.addWidget(active_group)
+        
+        # Right panel: Completed/Sold Listings
+        sold_group = QGroupBox("Completed/Sold Listings (Terapeak)")
+        sold_layout = QVBoxLayout()
+        
+        self.sold_results_text = QTextEdit()
+        self.sold_results_text.setReadOnly(True)
+        sold_layout.addWidget(self.sold_results_text)
+        
+        sold_group.setLayout(sold_layout)
+        results_splitter.addWidget(sold_group)
+        
+        # Set equal sizes for both panels
+        results_splitter.setSizes([500, 500])
+        
+        layout.addWidget(results_splitter)
         
         return widget
     
@@ -1171,38 +1191,21 @@ class InventoryManagementApp(QMainWindow):
             QMessageBox.warning(self, "Input Required", "Please enter a search query.")
             return
         
-        # Start building results HTML
-        results_html = f"<h2>Market Research: {query}</h2>"
-        results_html += "<hr>"
+        # Build HTML for active listings (left panel)
+        active_html = f"<h2>Active Listings: {query}</h2><hr>"
+        
+        # Build HTML for sold listings (right panel)
+        sold_html = f"<h2>Completed/Sold: {query}</h2><hr>"
         
         # Try to get eBay API results if configured
         if self.ebay_client.is_configured():
             try:
-                # Get completed/sold items from eBay
-                sold_items = self.ebay_client.search_completed_items(query, max_results=5)
-                
-                if sold_items:
-                    results_html += "<h3 style='color: #2196F3;'>eBay Sold Listings (Recent)</h3>"
-                    for item in sold_items:
-                        results_html += f"""
-                        <div style="margin-bottom: 15px; padding: 10px; background-color: #e8f5e9; border-left: 4px solid #4CAF50;">
-                            <p><strong>{item.get('title', 'Unknown')}</strong></p>
-                            <p><strong>Price:</strong> ${item.get('price', 0):.2f} {item.get('currency', 'USD')}</p>
-                            <p><strong>Condition:</strong> {item.get('condition', 'N/A')}</p>
-                            <p><strong>Sold Date:</strong> {item.get('sold_date', 'N/A')}</p>
-                            <p><strong>Shipping:</strong> ${item.get('shipping_cost', 0):.2f}</p>
-                            <p><a href="{item.get('url', '#')}" target="_blank">View Listing</a></p>
-                        </div>
-                        """
-                    results_html += "<hr>"
-                
                 # Get active listings from eBay
-                active_items = self.ebay_client.search_active_listings(query, max_results=5)
+                active_items = self.ebay_client.search_active_listings(query, max_results=10)
                 
                 if active_items:
-                    results_html += "<h3 style='color: #FF9800;'>eBay Active Listings (Current)</h3>"
                     for item in active_items:
-                        results_html += f"""
+                        active_html += f"""
                         <div style="margin-bottom: 15px; padding: 10px; background-color: #fff3cd; border-left: 4px solid #FF9800;">
                             <p><strong>{item.get('title', 'Unknown')}</strong></p>
                             <p><strong>Price:</strong> ${item.get('price', 0):.2f} {item.get('currency', 'USD')}</p>
@@ -1212,32 +1215,54 @@ class InventoryManagementApp(QMainWindow):
                             <p><a href="{item.get('url', '#')}" target="_blank">View Listing</a></p>
                         </div>
                         """
-                    results_html += "<hr>"
+                else:
+                    active_html += "<p><i>No active listings found.</i></p>"
+                
+                # Get completed/sold items from eBay
+                sold_items = self.ebay_client.search_completed_items(query, max_results=10)
+                
+                if sold_items:
+                    for item in sold_items:
+                        sold_html += f"""
+                        <div style="margin-bottom: 15px; padding: 10px; background-color: #e8f5e9; border-left: 4px solid #4CAF50;">
+                            <p><strong>{item.get('title', 'Unknown')}</strong></p>
+                            <p><strong>Price:</strong> ${item.get('price', 0):.2f} {item.get('currency', 'USD')}</p>
+                            <p><strong>Condition:</strong> {item.get('condition', 'N/A')}</p>
+                            <p><strong>Sold Date:</strong> {item.get('sold_date', 'N/A')}</p>
+                            <p><strong>Shipping:</strong> ${item.get('shipping_cost', 0):.2f}</p>
+                            <p><a href="{item.get('url', '#')}" target="_blank">View Listing</a></p>
+                        </div>
+                        """
+                else:
+                    sold_html += "<p><i>No sold listings found.</i></p>"
                 
                 self.statusBar().showMessage(f"Search completed with eBay API data for: {query}")
             
             except Exception as e:
-                results_html += f"""
+                error_msg = f"""
                 <div style="padding: 10px; background-color: #ffebee; border-left: 4px solid #f44336;">
                     <p><strong>eBay API Error:</strong> {str(e)}</p>
-                    <p>Falling back to simulated data...</p>
+                    <p>Unable to fetch live data.</p>
                 </div>
-                <hr>
                 """
-                self.statusBar().showMessage(f"eBay API error - using simulated data for: {query}")
+                active_html += error_msg
+                sold_html += error_msg
+                self.statusBar().showMessage(f"eBay API error for: {query}")
         else:
-            results_html += """
+            notice_msg = """
             <div style="padding: 10px; background-color: #e3f2fd; border-left: 4px solid #2196F3;">
-                <p><strong>Note:</strong> eBay API not configured. Showing simulated data.</p>
-                <p>To enable live marketplace data, go to Settings → eBay API Configuration</p>
+                <p><strong>Note:</strong> eBay API not configured.</p>
+                <p>To enable live marketplace data, go to:</p>
+                <p><strong>Settings → eBay API Configuration</strong></p>
             </div>
-            <hr>
             """
+            active_html += notice_msg
+            sold_html += notice_msg
+            self.statusBar().showMessage(f"eBay API not configured")
         
-        self.results_text.setHtml(results_html)
-        
-        if not self.ebay_client.is_configured():
-            self.statusBar().showMessage(f"Search completed (simulated data) for: {query}")
+        # Update both panels
+        self.active_results_text.setHtml(active_html)
+        self.sold_results_text.setHtml(sold_html)
 
 
 def main():

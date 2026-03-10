@@ -3,6 +3,15 @@
 <meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
 <script type="text/javascript">
 var debounceTimer;
+var itemIdDebounceTimer;
+function itemIdChanged(field) {
+	clearTimeout(itemIdDebounceTimer);
+	if (field.value.length >= 5) {
+		itemIdDebounceTimer = setTimeout(function() {
+			document.getElementById('locationInput').focus();
+		}, 500);
+	}
+}
 function locationChanged(field) {
 	clearTimeout(debounceTimer);
 	if (field.value.length >= 4) {
@@ -67,8 +76,8 @@ if (count($_POST) > 0) {
 ?>
 <div style="margin:auto; border:1px solid black; position:relative">
 <form id="inputForm" method="post">
-&nbsp; ItemID: <input id="itemIdInput" type="text"  name="itemId" value=""><br>
-Location: <input type="text" name="location" value="" oninput="locationChanged(this)"><br>
+&nbsp; ItemID: <input id="itemIdInput" type="text"  name="itemId" value="" oninput="itemIdChanged(this)"><br>
+Location: <input id="locationInput" type="text" name="location" value="" oninput="locationChanged(this)"><br>
 <input type="submit" value="Submit" onFocus="submitForm()">
 </form> 
 <div id="message" style="color:<?php echo $messageColor?>">

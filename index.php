@@ -57,8 +57,6 @@ if (count($_POST) > 0) {
 			if (fwrite($file, $itemId . "\t" . $location . "\n")) {
 				$messageColor = "black";
 				$message = "Added: ItemID: " . $itemId . ";  Location: " . $location;
-				$hfile = fopen("inventory-history.csv", 'a');
-				fwrite($hfile, $itemId . "\t" . $location . "\n");	
 			}
 			else {
 				$message = "There was an error writing the new data!";

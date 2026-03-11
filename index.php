@@ -139,7 +139,14 @@ window.onload = resetFocus;
 <body>
 <!-- form processing -->
 <?php
-include 'db_config.php';
+// SQL Server connection settings for the SixBit database.
+// Override via SIXBIT_SERVER / SIXBIT_DB environment variables if needed.
+if (!defined('SIXBIT_SERVER')) {
+	define('SIXBIT_SERVER', getenv('SIXBIT_SERVER') ?: 'SERVERWIN\\SIXBITDBSERVER');
+}
+if (!defined('SIXBIT_DB')) {
+	define('SIXBIT_DB', getenv('SIXBIT_DB') ?: 'SixBit');
+}
 
 // ── SQL search handler (GET) ───────────────────────────────────────────────
 $searchQuery     = '';

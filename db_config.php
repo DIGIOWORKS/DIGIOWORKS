@@ -6,5 +6,5 @@ if (!defined('SIXBIT_SERVER')) {
 	define('SIXBIT_SERVER', getenv('SIXBIT_SERVER') ?: 'SERVERWIN\\SIXBITDBSERVER');
 }
 if (!defined('SIXBIT_DB')) {
-	define('SIXBIT_DB', getenv('SIXBIT_DB') ?: 'SixBit');
+	define('SIXBIT_DB', getenv('SIXBIT_DB') ?: 'SixBit_BT_002');
 }

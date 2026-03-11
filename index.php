@@ -145,7 +145,7 @@ if (!defined('SIXBIT_SERVER')) {
 	define('SIXBIT_SERVER', getenv('SIXBIT_SERVER') ?: 'SERVERWIN\\SIXBITDBSERVER');
 }
 if (!defined('SIXBIT_DB')) {
-	define('SIXBIT_DB', getenv('SIXBIT_DB') ?: 'SixBit');
+	define('SIXBIT_DB', getenv('SIXBIT_DB') ?: 'SixBit_BT_002');
 }
 
 // ── SQL search handler (GET) ───────────────────────────────────────────────
@@ -173,8 +173,6 @@ if (isset($_GET['q']) && trim($_GET['q']) !== '') {
 			             . ($errs ? htmlspecialchars($errs[0]['message']) : 'Unknown error');
 		} else {
 			// Parameterized query – safe against SQL injection.
-			// Adjust the table name (Listing) and column names to match
-			// the actual schema on SERVERWIN\SIXBITDBSERVER.
 			$param  = '%' . $searchQuery . '%';
 			$sql    = "SELECT TOP 50
 			               ItemID,
@@ -183,7 +181,7 @@ if (isset($_GET['q']) && trim($_GET['q']) !== '') {
 			               SellingPrice,
 			               Quantity,
 			               Status
-			           FROM Listing
+			           FROM dbo.Listing
 			           WHERE Title LIKE ?
 			              OR SKU   LIKE ?
 			              OR CAST(ItemID AS VARCHAR(20)) LIKE ?

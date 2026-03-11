@@ -3,17 +3,20 @@
 <meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
 <style>
 html, body {
-	height: 100%;
+	min-height: 100%;
 	margin: 0;
 	padding: 0;
 }
 body {
 	display: flex;
+	flex-direction: column;
 	align-items: center;
-	justify-content: center;
+	justify-content: flex-start;
+	padding: 40px 20px;
 	font-family: Arial, sans-serif;
 	font-size: 1.4em;
 	background: #f4f4f4;
+	box-sizing: border-box;
 }
 #container {
 	background: #fff;
@@ -22,6 +25,9 @@ body {
 	padding: 40px 60px;
 	box-shadow: 0 2px 12px rgba(0,0,0,0.12);
 	min-width: 320px;
+	width: 100%;
+	max-width: 900px;
+	box-sizing: border-box;
 }
 #container form input[type="text"] {
 	font-size: 1em;
@@ -39,6 +45,68 @@ body {
 }
 #printButtonBox {
 	margin-top: 16px;
+}
+/* ── Search section ───────────────────────────────── */
+#searchSection {
+	margin-top: 32px;
+	padding-top: 24px;
+	border-top: 1px solid #e0e0e0;
+}
+#searchSection h2 {
+	margin: 0 0 12px 0;
+	font-size: 1em;
+	color: #444;
+}
+#searchForm {
+	display: flex;
+	gap: 8px;
+	flex-wrap: wrap;
+	align-items: center;
+}
+#searchForm input[type="text"] {
+	flex: 1;
+	min-width: 180px;
+	font-size: 1em;
+	padding: 6px 8px;
+}
+#searchForm input[type="submit"] {
+	font-size: 1em;
+	padding: 6px 16px;
+}
+#searchError {
+	margin-top: 10px;
+	color: red;
+	font-weight: bold;
+}
+#searchResults {
+	margin-top: 16px;
+	width: 100%;
+	overflow-x: auto;
+}
+#searchResults table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 0.85em;
+}
+#searchResults th {
+	background: #e8e8e8;
+	padding: 6px 10px;
+	text-align: left;
+	border: 1px solid #ccc;
+	white-space: nowrap;
+}
+#searchResults td {
+	padding: 6px 10px;
+	border: 1px solid #ddd;
+	vertical-align: top;
+}
+#searchResults tr:nth-child(even) td {
+	background: #f9f9f9;
+}
+#searchResults .no-results {
+	color: #888;
+	font-style: italic;
+	margin-top: 8px;
 }
 </style>
 <script type="text/javascript">
@@ -70,7 +138,67 @@ window.onload = resetFocus;
 </head>
 <body>
 <!-- form processing -->
-<?php 
+<?php
+include 'db_config.php';
+
+// ── SQL search handler (GET) ───────────────────────────────────────────────
+$searchQuery     = '';
+$searchResults   = [];
+$searchError     = '';
+$searchPerformed = false;
+
+if (isset($_GET['q']) && trim($_GET['q']) !== '') {
+	$searchQuery     = trim($_GET['q']);
+	$searchPerformed = true;
+
+	if (!extension_loaded('sqlsrv')) {
+		$searchError = 'The sqlsrv PHP extension is not loaded. '
+		             . 'Please install the Microsoft SQL Server Driver for PHP.';
+	} else {
+		$connectionInfo = [
+			'Database'               => SIXBIT_DB,
+			'TrustServerCertificate' => true,
+		];
+		$conn = sqlsrv_connect(SIXBIT_SERVER, $connectionInfo);
+		if ($conn === false) {
+			$errs = sqlsrv_errors();
+			$searchError = 'Database connection failed: '
+			             . ($errs ? htmlspecialchars($errs[0]['message']) : 'Unknown error');
+		} else {
+			// Parameterized query – safe against SQL injection.
+			// Adjust the table name (Listing) and column names to match
+			// the actual schema on SERVERWIN\SIXBITDBSERVER.
+			$param  = '%' . $searchQuery . '%';
+			$sql    = "SELECT TOP 50
+			               ItemID,
+			               Title,
+			               SKU,
+			               SellingPrice,
+			               Quantity,
+			               Status
+			           FROM Listing
+			           WHERE Title LIKE ?
+			              OR SKU   LIKE ?
+			              OR CAST(ItemID AS VARCHAR(20)) LIKE ?
+			           ORDER BY Title";
+			$params = [$param, $param, $param];
+			$stmt   = sqlsrv_query($conn, $sql, $params);
+			if ($stmt === false) {
+				$errs = sqlsrv_errors();
+				$searchError = 'Query failed: '
+				             . ($errs ? htmlspecialchars($errs[0]['message']) : 'Unknown error');
+			} else {
+				while ($row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
+					$searchResults[] = $row;
+				}
+				sqlsrv_free_stmt($stmt);
+			}
+			sqlsrv_close($conn);
+		}
+	}
+}
+// ── End search handler ────────────────────────────────────────────────────
+
 include 'print.php';
 $message = "";
 $printMessage = "";
@@ -144,6 +272,54 @@ Location: <input id="locationInput" type="text" name="location" value="" oninput
 </form>
 <?php echo $printMessage?>
 </div>
+
+<!-- ── Search section ─────────────────────────────── -->
+<div id="searchSection">
+<h2>Search SixBit Database</h2>
+<form id="searchForm" method="get" action="">
+<input type="text" name="q" id="searchInput"
+       placeholder="Title, SKU, or Item ID&hellip;"
+       value="<?php echo htmlspecialchars($searchQuery)?>"
+       autocomplete="off">
+<input type="submit" value="Search">
+</form>
+
+<?php if ($searchError): ?>
+<div id="searchError"><?php echo htmlspecialchars($searchError)?></div>
+<?php elseif ($searchPerformed && count($searchResults) === 0): ?>
+<div id="searchResults"><p class="no-results">No results found for &ldquo;<?php echo htmlspecialchars($searchQuery)?>&rdquo;.</p></div>
+<?php elseif (count($searchResults) > 0): ?>
+<div id="searchResults">
+<table>
+<thead>
+<tr>
+<th>Item ID</th>
+<th>Title</th>
+<th>SKU</th>
+<th>Price</th>
+<th>Qty</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<?php foreach ($searchResults as $row): ?>
+<tr>
+<td><?php echo htmlspecialchars((string)$row['ItemID'])?></td>
+<td><?php echo htmlspecialchars((string)$row['Title'])?></td>
+<td><?php echo htmlspecialchars((string)$row['SKU'])?></td>
+<td><?php echo htmlspecialchars((string)$row['SellingPrice'])?></td>
+<td><?php echo htmlspecialchars((string)$row['Quantity'])?></td>
+<td><?php echo htmlspecialchars((string)$row['Status'])?></td>
+</tr>
+<?php endforeach?>
+</tbody>
+</table>
+</div>
+<?php endif?>
+
+</div>
+<!-- ── End search section ─────────────────────────── -->
+
 </div>
 </body>
 </html>

@@ -1,6 +1,6 @@
 <?php
 /**
- * print.php
+ * sprint.php
  *
  * Provides printLabel() to print an inventory item label with a Code-128
  * barcode on the DYMO LabelWriter 400 shared at \\w530pc.

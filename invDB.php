@@ -198,7 +198,7 @@ if (isset($_GET['q']) && trim($_GET['q']) !== '') {
 }
 // ── End search handler ────────────────────────────────────────────────────
 
-include 'print.php';
+include 'sprint.php';
 $message = "";
 $printMessage = "";
 $messageColor = "red";
@@ -209,7 +209,7 @@ if (count($_POST) > 0) {
 		if (!(empty($_POST["itemId"]))) {
 			$itemId = $_POST["itemId"];
 			if (ctype_digit($itemId)) {
-				$printMessage = printLabel($itemId, "printer.csv");
+				$printMessage = printLabel($itemId, "sprinter.csv");
 			}
 			else {
 				$printMessage = "Invalid ItemID to print!";
